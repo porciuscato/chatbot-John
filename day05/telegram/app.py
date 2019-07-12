@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 import requests
 from decouple import config
 from pprint import pprint
+import random
 app = Flask(__name__)
 
 token = config('TELEGRAM_TOKEN')
@@ -38,19 +39,49 @@ def send():
 
 @app.route(f'/{token}', methods=['POST'])
 def webhook():
-    # 1. 메아리 챗봇
-    # (1) webhook을 통해 telegram 보낸 요청 안에 있는 메세지를 가져와
-    # (2) 그대로 전송
     res = request.get_json()
     text = res.get('message').get('text')
     chat_id = res.get('message').get('chat').get('id')
 
+    pprint(res)
 
     base = "https://api.telegram.org"
     method = "sendMessage"
 
+    if res.get("message").get("photo") is not None:
+        file_id = res.get("message").get("photo")[-1].get('file_id')
+        file_res = requests.get(f"{base}/bot{token}/getFile?file_id={file_id}")
+        file_path = file_res.json().get("result").get("file_path")
+        file_url = f"{base}/file/bot{token}/{file_path}"
+
+        image = requests.get(file_url, stream=True)
+
+        url = "https://openapi.naver.com/v1/vision/celebrity"
+
+        headers = {
+            'X-Naver-Client-Id': config('NAVER_ID'),
+            'X-Naver-Client-Secret': config('NAVER_SECRET')
+        }
+        files = {
+            'image': image.raw.read()
+        }
+
+        clova_res = requests.post(url, headers=headers, files=files)
+        text = clova_res.json().get('faces')[0].get('celebrity').get('value')
+    else:
+        if text == "lotto":
+            # 로또 번호 추천
+            text = str(sorted(random.sample(range(1, 46), 6)))
+        # elif text[0:3] == "/번역":
+        #     # papago로 네이버 번역 결과를 알려준다.
+    
+
+    
+    
     url = f"{base}/bot{token}/{method}?chat_id={chat_id}&text={text}"
     requests.get(url)
+    
+    
     return '', 200
 
 if __name__ == "__main__":
